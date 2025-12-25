@@ -3,6 +3,8 @@
 // Counter contract account id on testnet - defined once
 const COUNTER_CONTRACT_ID_BECH32 = "mtst1qpcls0rfcszxvqrhnvn3xvqvapcqqg88tg9";
 const NODE_ENDPOINT = "https://rpc.testnet.miden.io:443";
+// Storage slot index where the counter value is stored
+const COUNTER_STORAGE_SLOT_INDEX = 0;
 
 export async function getCount(): Promise<number> {
   if (typeof window === "undefined") {
@@ -14,7 +16,7 @@ export async function getCount(): Promise<number> {
   const { WebClient, Address } = await import("@demox-labs/miden-sdk");
 
   const counterContractId = Address.fromBech32(
-    COUNTER_CONTRACT_ID_BECH32
+    COUNTER_CONTRACT_ID_BECH32,
   ).accountId();
 
   const client = await WebClient.createClient(NODE_ENDPOINT);
@@ -32,9 +34,11 @@ export async function getCount(): Promise<number> {
   }
 
   // read slot 0
-  const storageItem = counterContractAccount.storage().getItem(0);
+  const storageItem = counterContractAccount
+    .storage()
+    .getItem(COUNTER_STORAGE_SLOT_INDEX);
   if (!storageItem) {
-    throw new Error("No storage item at key 0");
+    throw new Error(`No storage item at key ${COUNTER_STORAGE_SLOT_INDEX}`);
   }
   const valueWord = storageItem.toHex();
 
@@ -64,14 +68,14 @@ export async function incrementCount(): Promise<string> {
   } = await import("@demox-labs/miden-sdk");
 
   const counterContractId = Address.fromBech32(
-    COUNTER_CONTRACT_ID_BECH32
+    COUNTER_CONTRACT_ID_BECH32,
   ).accountId();
 
   try {
     const client = await WebClient.createClient(NODE_ENDPOINT);
     console.log(
       "Current block number: ",
-      (await client.syncState()).blockNum()
+      (await client.syncState()).blockNum(),
     );
 
     // Counter contract code in Miden Assembly
@@ -81,7 +85,7 @@ export async function incrementCount(): Promise<string> {
 
       # => []
       export.get_count
-          push.0
+          push.${COUNTER_STORAGE_SLOT_INDEX}
           # => [index]
 
           exec.account::get_item
@@ -93,7 +97,7 @@ export async function incrementCount(): Promise<string> {
 
       # => []
       export.increment
-          push.0
+          push.${COUNTER_STORAGE_SLOT_INDEX}
           # => [index]
 
           exec.account::get_item
@@ -105,7 +109,7 @@ export async function incrementCount(): Promise<string> {
           # debug statement with client
           push.111 debug.stack drop
 
-          push.0
+          push.${COUNTER_STORAGE_SLOT_INDEX}
           # [index, count+1]
 
           exec.account::set_item
@@ -143,13 +147,13 @@ export async function incrementCount(): Promise<string> {
     let counterComponentLib = AssemblerUtils.createAccountComponentLibrary(
       assembler, // assembler
       "external_contract::counter_contract", // library path to call the contract
-      counterContractCode // account code of the contract
+      counterContractCode, // account code of the contract
     );
 
     // Creating the transaction script
     let txScript = TransactionScript.compile(
       txScriptCode,
-      assembler.withLibrary(counterComponentLib)
+      assembler.withLibrary(counterComponentLib),
     );
 
     // Creating a transaction request with the transaction script
@@ -160,7 +164,7 @@ export async function incrementCount(): Promise<string> {
     // Executing the transaction script against the counter contract
     let transactionResult = await client.newTransaction(
       counterContractAccount.id(),
-      transactionRequest
+      transactionRequest,
     );
 
     // Submit transaction
@@ -174,11 +178,11 @@ export async function incrementCount(): Promise<string> {
 
     // Here we get the first Word from storage of the counter contract
     // A word is comprised of 4 Felts, 2**64 - 2**32 + 1
-    let count = counter?.storage().getItem(0);
+    let count = counter?.storage().getItem(COUNTER_STORAGE_SLOT_INDEX);
 
     // Converting the Word represented as a hex to a single integer value
     const counterValue = Number(
-      BigInt("0x" + count!.toHex().slice(-16).match(/../g)!.reverse().join(""))
+      BigInt("0x" + count!.toHex().slice(-16).match(/../g)!.reverse().join("")),
     );
 
     console.log("Count: ", counterValue);
